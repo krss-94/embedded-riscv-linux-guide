@@ -1,0 +1,976 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Embedded RISC-V Linux — Step by Step</title>
+<style>
+  :root{
+    --bg:#0d1117;
+    --panel:#11161d;
+    --border:#232b34;
+    --path:#6ee7b7;      /* mint green — the prompt/path */
+    --cmd:#e6edf3;        /* bright white — the actual command */
+    --comment:#7a8699;    /* muted gray-blue — explanatory comments */
+    --heading:#f0b429;    /* amber — step headers */
+    --accent:#569cd6;     /* soft blue — step numbers */
+  }
+  *{box-sizing:border-box;}
+  body{
+    background:var(--bg);
+    color:var(--cmd);
+    font-family: "SF Mono","Consolas","Menlo",monospace;
+    margin:0;
+    padding:2.5rem 1.5rem 5rem;
+    line-height:1.55;
+  }
+  .wrap{max-width:880px;margin:0 auto;}
+  h1{
+    color:var(--heading);
+    font-size:1.4rem;
+    border-bottom:1px solid var(--border);
+    padding-bottom:0.8rem;
+    margin-bottom:0.3rem;
+  }
+  .subtitle{
+    color:var(--comment);
+    font-size:0.85rem;
+    margin-bottom:2rem;
+  }
+  .note{
+    background:var(--panel);
+    border-left:3px solid var(--heading);
+    color:var(--comment);
+    padding:0.7rem 1rem;
+    font-size:0.85rem;
+    margin-bottom:2.2rem;
+  }
+  section{margin-bottom:2.4rem;}
+  .step-title{
+    color:var(--heading);
+    font-size:1rem;
+    letter-spacing:0.03em;
+    margin:0 0 0.7rem;
+    padding-bottom:0.35rem;
+    border-bottom:1px dashed var(--border);
+  }
+  .step-title .num{color:var(--accent);margin-right:0.5rem;}
+  .block{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:6px;
+    padding:0.9rem 1rem;
+    overflow-x:auto;
+  }
+  .line{white-space:pre;font-size:0.86rem;margin:0.05rem 0;}
+  .path{color:var(--path);user-select:none;-webkit-user-select:none;cursor:default;}
+  .cmd{color:var(--cmd);font-weight:600;}
+  .comment{color:var(--comment);font-style:italic;font-weight:400;user-select:none;-webkit-user-select:none;cursor:default;}
+  .line.comment{user-select:none;-webkit-user-select:none;cursor:default;}
+  .blank{height:0.5rem;}
+
+  /* ---------- layout shell ---------- */
+  html{scroll-behavior:smooth;}
+  ::selection{background:#264f78;color:#fff;}
+  body{padding:0;}
+  .app{display:flex;max-width:1180px;margin:0 auto;align-items:flex-start;}
+  .wrap{max-width:840px;flex:1 1 auto;min-width:0;padding:2.5rem 1.5rem 6rem 2rem;margin:0;}
+
+  /* progress bar */
+  .progress-shell{
+    position:sticky;top:0;z-index:30;height:3px;background:var(--border);
+  }
+  .progress-fill{height:100%;width:0%;background:linear-gradient(90deg,var(--accent),var(--path));transition:width .25s ease;}
+
+  /* top bar with title + search */
+  .topbar{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;}
+  .titleblock{flex:1 1 320px;}
+  .search-wrap{position:sticky;top:12px;flex:0 0 220px;}
+  .search-wrap input{
+    width:100%;background:var(--panel);border:1px solid var(--border);color:var(--cmd);
+    font-family:inherit;font-size:0.8rem;padding:0.5rem 0.7rem 0.5rem 1.9rem;border-radius:6px;
+    outline:none;
+  }
+  .search-wrap input:focus{border-color:var(--accent);}
+  .search-wrap{position:relative;}
+  .search-wrap::before{
+    content:"⌕";position:absolute;left:0.65rem;top:50%;transform:translateY(-50%);
+    color:var(--comment);font-size:0.95rem;pointer-events:none;
+  }
+  .search-count{font-size:0.72rem;color:var(--comment);margin-top:0.35rem;text-align:right;min-height:1em;}
+
+  /* sidebar TOC */
+  .sidebar{
+    position:sticky;top:0;align-self:flex-start;height:100vh;overflow-y:auto;
+    width:230px;flex:0 0 230px;padding:1.6rem 0.9rem 2rem 1.2rem;
+    border-right:1px solid var(--border);
+    scrollbar-width:thin;scrollbar-color:var(--border) transparent;
+  }
+  .sidebar::-webkit-scrollbar{width:6px;}
+  .sidebar::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+  .sidebar-head{
+    display:flex;align-items:center;justify-content:space-between;
+    font-size:0.72rem;letter-spacing:0.08em;color:var(--comment);
+    text-transform:uppercase;margin-bottom:0.7rem;
+  }
+  .sidebar-head span.count{color:var(--accent);}
+  .toc-list{list-style:none;margin:0;padding:0;}
+  .toc-list li{margin:0;}
+  .toc-list a{
+    display:flex;align-items:center;gap:0.5rem;
+    color:var(--comment);text-decoration:none;font-size:0.78rem;
+    padding:0.36rem 0.5rem;border-radius:5px;border-left:2px solid transparent;
+    line-height:1.3;transition:background .12s,color .12s;
+  }
+  .toc-list a:hover{background:var(--panel);color:var(--cmd);}
+  .toc-list a.active{color:var(--heading);border-left-color:var(--heading);background:var(--panel);}
+  .toc-list a .toc-num{color:var(--accent);flex:0 0 auto;font-size:0.72rem;}
+  .toc-list a.done .toc-label{text-decoration:line-through;opacity:0.5;}
+  .toc-list li.hidden{display:none;}
+
+  .reset-progress{
+    margin-top:1rem;width:100%;background:none;border:1px solid var(--border);
+    color:var(--comment);font-family:inherit;font-size:0.7rem;padding:0.4rem;
+    border-radius:5px;cursor:pointer;letter-spacing:0.03em;
+  }
+  .reset-progress:hover{color:#f87171;border-color:#f87171;}
+
+  /* mobile TOC toggle */
+  .toc-toggle{
+    display:none;position:fixed;bottom:1.2rem;left:1.2rem;z-index:40;
+    background:var(--panel);border:1px solid var(--border);color:var(--cmd);
+    font-family:inherit;font-size:0.78rem;padding:0.55rem 0.9rem;border-radius:20px;
+    cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,0.4);
+  }
+
+  /* step checkbox + anchor */
+  .step-title{display:flex;align-items:center;gap:0.6rem;justify-content:space-between;cursor:default;}
+  .step-title-left{display:flex;align-items:center;gap:0.5rem;min-width:0;}
+  .step-check{
+    flex:0 0 auto;width:15px;height:15px;border:1px solid var(--border);border-radius:4px;
+    background:var(--panel);cursor:pointer;appearance:none;-webkit-appearance:none;
+    position:relative;margin:0;
+  }
+  .step-check:checked{background:var(--heading);border-color:var(--heading);}
+  .step-check:checked::after{
+    content:"✓";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    font-size:0.6rem;color:#0d1117;font-weight:900;
+  }
+  .step-title.done .step-title-text{text-decoration:line-through;opacity:0.45;}
+  .step-anchor{color:var(--comment);text-decoration:none;font-size:0.75rem;opacity:0;transition:opacity .12s;margin-left:0.4rem;}
+  .step-title:hover .step-anchor{opacity:0.6;}
+  .step-anchor:hover{opacity:1 !important;color:var(--accent);}
+  section{scroll-margin-top:1rem;}
+  section.filtered-out{display:none;}
+
+  /* copy-all button (whole block, small + secondary, top-right corner) */
+  .block{position:relative;padding-right:2.4rem;}
+  .copy-all-btn{
+    position:absolute;top:0.4rem;right:0.4rem;
+    display:flex;align-items:center;justify-content:center;
+    width:22px;height:22px;
+    background:transparent;border:1px solid transparent;color:var(--comment);
+    border-radius:5px;cursor:pointer;opacity:0;
+    transition:opacity .12s,border-color .12s,color .12s,background .12s;
+  }
+  .block:hover .copy-all-btn{opacity:0.55;}
+  .copy-all-btn:hover{opacity:1 !important;border-color:var(--border);background:var(--bg);color:var(--cmd);}
+  .copy-all-btn.copied{opacity:1 !important;border-color:#4ade80;color:#4ade80;}
+  .copy-all-btn svg{width:12px;height:12px;}
+  .copy-all-btn[disabled]{display:none;}
+  .copy-all-btn,.line-copy{user-select:none;-webkit-user-select:none;}
+
+  /* per-line copy icon */
+  .line{position:relative;}
+  .line-copy{
+    position:absolute;top:50%;right:0;transform:translateY(-50%);
+    display:flex;align-items:center;justify-content:center;
+    width:20px;height:20px;
+    background:var(--bg);border:1px solid var(--border);color:var(--comment);
+    border-radius:4px;cursor:pointer;opacity:0;
+    transition:opacity .1s,border-color .1s,color .1s;
+  }
+  .line:hover .line-copy{opacity:0.8;}
+  .line-copy:hover{opacity:1 !important;border-color:var(--accent);color:var(--cmd);}
+  .line-copy.copied{opacity:1 !important;border-color:#4ade80;color:#4ade80;}
+  .line-copy svg{width:10px;height:10px;}
+  .line.group-continuation .line-copy{display:none;}
+
+  /* touch devices have no hover — keep icons faintly visible instead of invisible */
+  @media (hover:none){
+    .line-copy{opacity:0.45;}
+    .block .copy-all-btn{opacity:0.4;}
+  }
+
+  /* back to top */
+  .back-top{
+    position:fixed;bottom:1.2rem;right:1.2rem;z-index:40;
+    width:38px;height:38px;border-radius:50%;
+    background:var(--panel);border:1px solid var(--border);color:var(--accent);
+    display:flex;align-items:center;justify-content:center;cursor:pointer;
+    opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;
+    box-shadow:0 4px 14px rgba(0,0,0,0.4);
+  }
+  .back-top.show{opacity:0.85;pointer-events:auto;}
+  .back-top:hover{opacity:1;transform:translateY(-2px);}
+
+  @media (max-width:900px){
+    .sidebar{
+      position:fixed;top:0;left:0;height:100vh;width:78vw;max-width:300px;
+      background:var(--bg);z-index:39;transform:translateX(-102%);
+      transition:transform .22s ease;box-shadow:4px 0 18px rgba(0,0,0,0.5);
+    }
+    .sidebar.open{transform:translateX(0);}
+    .toc-toggle{display:block;}
+    .wrap{padding:1.6rem 1rem 6rem;}
+    .search-wrap{flex:1 1 auto;position:static;}
+    .sidebar-overlay{
+      display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:38;
+    }
+    .sidebar-overlay.show{display:block;}
+  }
+</style>
+</head>
+<body>
+<div class="progress-shell"><div class="progress-fill" id="progressFill"></div></div>
+<div class="app">
+
+<button class="toc-toggle" id="tocToggle">☰ Steps</button>
+<div class="sidebar-overlay" id="sidebarOverlay"></div>
+<nav class="sidebar" id="sidebar">
+  <div class="sidebar-head">Steps <span class="count" id="progressCount">0/0</span></div>
+  <ul class="toc-list" id="tocList"></ul>
+  <button class="reset-progress" id="resetProgress">Reset progress</button>
+</nav>
+
+<main class="wrap">
+
+<div class="topbar">
+  <div class="titleblock">
+    <h1>Embedded RISC-V Linux — Step by Step Command Guide</h1>
+    <div class="subtitle">Consolidated from class notes 07/06 – 07/17. Every command line shows the prompt (user@host:path) it was run from.</div>
+  </div>
+  <div class="search-wrap">
+    <input type="text" id="searchBox" placeholder="Filter steps or commands…" autocomplete="off">
+    <div class="search-count" id="searchCount"></div>
+  </div>
+</div>
+
+<div class="note">
+Mirror IP note: school notes use <b>10.0.1.147</b> or <b>10.0.1.148</b> (campus-only repo).
+Off-campus, swap that IP for <b>deb.debian.org</b> wherever it appears.
+</div>
+
+<section>
+<div class="step-title"><span class="num">STEP 0</span>HOST PREP (before creating the VM)</div>
+<div class="block">
+<div class="line comment"># Download Debian netinst ISO (campus mirror shown; use official Debian site if off-campus)</div>
+<div class="line cmd">http://10.0.1.147/debian-13.5.0-amd64-netinst.iso</div>
+<div class="blank"></div>
+<div class="line comment"># Download & install VirtualBox</div>
+<div class="line cmd">https://www.virtualbox.org/wiki/Downloads</div>
+</div>
+</section>
+
+<section>
+<div class="step-title"><span class="num">STEP 1</span>CREATE THE VIRTUALBOX VM</div>
+<div class="block">
+<div class="line comment"># In VM Settings, before first boot, configure:</div>
+<div class="line comment"># - Memory: 8192 MB (8 GB)</div>
+<div class="line comment"># - Enable UEFI</div>
+<div class="line comment"># - Hard disk: at least 40 GB</div>
+<div class="line comment"># - Audio: disabled</div>
+<div class="line comment"># - Network: attached to NAT</div>
+</div>
+</section>
+
+<section>
+<div class="step-title"><span class="num">STEP 2</span>INSTALL DEBIAN 13 (guided install)</div>
+<div class="block">
+<div class="line comment"># Boot the ISO, confirm Debian 13 + UEFI shown, choose "Install"</div>
+<div class="blank"></div>
+<div class="line comment"># Installer prompts, in order:</div>
+<div class="line cmd">Language:        English</div>
+<div class="line cmd">Location:        India</div>
+<div class="line cmd">Keyboard:        American English</div>
+<div class="line cmd">Hostname:        debian            (leave default)</div>
+<div class="line cmd">Domain name:     (leave empty)</div>
+<div class="blank"></div>
+<div class="line comment"># Root password</div>
+<div class="line cmd">Password: abc123</div>
+<div class="line cmd">Re-enter: abc123</div>
+<div class="blank"></div>
+<div class="line comment"># Create normal user</div>
+<div class="line cmd">Username: hunter</div>
+<div class="line cmd">Re-enter username: hunter</div>
+<div class="line cmd">Password: abc123</div>
+<div class="line cmd">Re-enter password: abc123</div>
+<div class="blank"></div>
+<div class="line comment"># Partitioning</div>
+<div class="line cmd">Guided - use entire disk</div>
+<div class="line cmd">(select the only disk shown)</div>
+<div class="line cmd">Partitioning scheme: All files in one partition (recommended for new users)</div>
+<div class="line cmd">Finish partitioning and write changes to disk</div>
+<div class="line cmd">Confirm: &lt;Yes&gt;</div>
+<div class="blank"></div>
+<div class="line comment"># Installing base system</div>
+<div class="line cmd">Scan extra installation media? &lt;No&gt;</div>
+<div class="line cmd">Debian archive mirror country: enter information manually</div>
+<div class="line cmd">Debian archive mirror hostname: 10.0.1.147</div>
+<div class="line cmd">Debian archive mirror directory: /debian/</div>
+<div class="line cmd">HTTP proxy: (leave empty)</div>
+<div class="line cmd">Participate in package survey? &lt;Yes&gt;</div>
+<div class="blank"></div>
+<div class="line comment"># Software selection — check ONLY:</div>
+<div class="line cmd">[ ] Deselect GNOME</div>
+<div class="line cmd">[x] XFCE</div>
+<div class="line cmd">[x] SSH server</div>
+<div class="line cmd">[x] standard system utilities</div>
+<div class="blank"></div>
+<div class="line comment"># Continue, wait for ~1228 packages to install, then:</div>
+<div class="line cmd">Finish the installation -&gt; &lt;Continue&gt; (reboots)</div>
+</div>
+</section>
+
+<section>
+<div class="step-title"><span class="num">STEP 3</span>FIRST LOGIN &amp; BASIC LINUX COMMANDS</div>
+<div class="block">
+<div class="line comment"># Log in</div>
+<div class="line cmd">username: hunter</div>
+<div class="line cmd">password: abc123</div>
+<div class="blank"></div>
+<div class="line comment"># Check who you are</div>
+<div class="line"><span class="path">hunter@debian:~$ </span><span class="cmd">whoami</span></div>
+<div class="blank"></div>
+<div class="line comment"># Become root</div>
+<div class="line"><span class="path">hunter@debian:~$ </span><span class="cmd">su -</span></div>
+<div class="line comment"># password: abc123</div>
+<div class="line"><span class="path">root@debian:~# </span><span class="cmd">whoami</span></div>
+<div class="blank"></div>
+<div class="line comment"># Check Debian version</div>
+<div class="line"><span class="path">hunter@debian:~$ </span><span class="cmd">cat /etc/os-release</span></div>
+<div class="line"><span class="path">hunter@debian:~$ </span><span class="cmd">cat /etc/debian_version</span></div>
+<div class="blank"></div>
+<div class="line comment"># Basic navigation commands</div>
+<div class="line"><span class="path">hunter@debian:~$ </span><span class="cmd">ls</span></div>
+<div class="line"><span class="path">hunter@debian:~$ </span><span class="cmd">ls -l</span></div>
+<div class="line"><span class="path">hunter@debian:~$ </span><span class="cmd">cd /etc</span></div>
+<div class="line"><span class="path">hunter@debian:/etc$ </span><span class="cmd">cd ..</span></div>
+<div class="line"><span class="path">hunter@debian:~$ </span><span class="cmd">cd .</span></div>
+<div class="line"><span class="path">hunter@debian:~$ </span><span class="cmd">cd</span></div>
+<div class="line"><span class="path">hunter@debian:~$ </span><span class="cmd">pwd</span></div>
+<div class="line"><span class="path">hunter@debian:~$ </span><span class="cmd">mkdir prog</span></div>
+<div class="line"><span class="path">hunter@debian:~$ </span><span class="cmd">rm -rf prog</span></div>
+<div class="blank"></div>
+<div class="line comment"># Shutdown the machine</div>
+<div class="line"><span class="path">hunter@debian:~$ </span><span class="cmd">su -</span></div>
+<div class="line"><span class="path">root@debian:~# </span><span class="cmd">shutdown -h now</span></div>
+</div>
+</section>
+
+<section>
+<div class="step-title"><span class="num">STEP 4</span>UPDATE / UPGRADE SYSTEM (root, do weekly)</div>
+<div class="block">
+<div class="line"><span class="path">root@debian:~# </span><span class="cmd">apt-get update</span></div>
+<div class="line"><span class="path">root@debian:~# </span><span class="cmd">apt-get upgrade</span></div>
+<div class="blank"></div>
+<div class="line comment"># NOTE: never run apt-get in two terminals at the same time</div>
+<div class="line comment"># (causes "Could not get lock /var/lib/dpkg/lock-frontend" error)</div>
+</div>
+</section>
+
+<section>
+<div class="step-title"><span class="num">STEP 5</span>TEST PACKAGE INSTALL/REMOVE (optional demo)</div>
+<div class="block">
+<div class="line"><span class="path">root@debian:~# </span><span class="cmd">apt-get install x11-apps xorg</span></div>
+<div class="line"><span class="path">hunter@debian:~$ </span><span class="cmd">xeyes</span></div>
+<div class="line comment"># Ctrl+C to quit</div>
+<div class="line"><span class="path">root@debian:~# </span><span class="cmd">apt-get remove x11-apps</span></div>
+<div class="blank"></div>
+<div class="line comment"># or, alternative demo package used in a later session:</div>
+<div class="line"><span class="path">root@debian:~# </span><span class="cmd">apt-get install xosview</span></div>
+<div class="line"><span class="path">hunter@debian:~$ </span><span class="cmd">xosview</span></div>
+<div class="line comment"># Ctrl+C to quit</div>
+<div class="line"><span class="path">root@debian:~# </span><span class="cmd">apt-get remove xosview</span></div>
+</div>
+</section>
+
+<section>
+<div class="step-title"><span class="num">STEP 6</span>CHECK SYSTEM STATUS / INFO</div>
+<div class="block">
+<div class="line"><span class="path">hunter@debian:~$ </span><span class="cmd">cat /proc/cpuinfo</span></div>
+<div class="line"><span class="path">hunter@debian:~$ </span><span class="cmd">df -h</span></div>
+<div class="line"><span class="path">hunter@debian:~$ </span><span class="cmd">lsblk</span></div>
+<div class="line"><span class="path">hunter@debian:~$ </span><span class="cmd">free -h</span></div>
+<div class="line"><span class="path">hunter@debian:~$ </span><span class="cmd">lspci</span></div>
+</div>
+</section>
+
+<section>
+<div class="step-title"><span class="num">STEP 7</span>INSTALL X86_64 TOOLCHAIN</div>
+<div class="block">
+<div class="line"><span class="path">hunter@debian:~$ </span><span class="cmd">gcc -v</span></div>
+<div class="line"><span class="path">hunter@debian:~$ </span><span class="cmd">g++ -v</span></div>
+<div class="line"><span class="path">hunter@debian:~$ </span><span class="cmd">cpp -v</span></div>
+<div class="blank"></div>
+<div class="line"><span class="path">root@debian:~# </span><span class="cmd">apt-get update</span></div>
+<div class="line"><span class="path">root@debian:~# </span><span class="cmd">apt-get install gcc cpp g++</span></div>
+<div class="blank"></div>
+<div class="line comment"># verify</div>
+<div class="line"><span class="path">hunter@debian:~$ </span><span class="cmd">gcc -v</span></div>
+<div class="line"><span class="path">hunter@debian:~$ </span><span class="cmd">g++ -v</span></div>
+<div class="line"><span class="path">hunter@debian:~$ </span><span class="cmd">cpp -v</span></div>
+</div>
+</section>
+
+<section>
+<div class="step-title"><span class="num">STEP 8</span>INSTALL RISC-V CROSS TOOLCHAIN</div>
+<div class="block">
+<div class="line"><span class="path">root@debian:~# </span><span class="cmd">apt-get install crossbuild-essential-riscv64 \</span></div>
+<div class="line cmd">                 gcc-riscv64-linux-gnu \</div>
+<div class="line cmd">                 cpp-riscv64-linux-gnu \</div>
+<div class="line cmd">                 g++-riscv64-linux-gnu \</div>
+<div class="line cmd">                 u-boot-qemu u-boot-tools opensbi \</div>
+<div class="line cmd">                 gcc g++ cpp \</div>
+<div class="line cmd">                 m4 make nasm bison flex autoconf \</div>
+<div class="line cmd">                 automake autotools-dev libncurses5-dev \</div>
+<div class="line cmd">                 dpkg-dev libssl-dev uuid-dev \</div>
+<div class="line cmd">                 libgnutls28-dev libelf-dev \</div>
+<div class="line cmd">                 rsync clang llvm lld bc</div>
+<div class="blank"></div>
+<div class="line comment"># verify</div>
+<div class="line"><span class="path">hunter@debian:~$ </span><span class="cmd">riscv64-linux-gnu-gcc -v</span></div>
+<div class="line"><span class="path">hunter@debian:~$ </span><span class="cmd">riscv64-linux-gnu-g++ -v</span></div>
+<div class="line"><span class="path">hunter@debian:~$ </span><span class="cmd">riscv64-linux-gnu-cpp -v</span></div>
+</div>
+</section>
+
+<section>
+<div class="step-title"><span class="num">STEP 9</span>WRITE &amp; CROSS-COMPILE A TEST C PROGRAM</div>
+<div class="block">
+<div class="line"><span class="path">hunter@debian:~$ </span><span class="cmd">mkdir prog</span></div>
+<div class="line"><span class="path">hunter@debian:~$ </span><span class="cmd">cd prog</span></div>
+<div class="line"><span class="path">hunter@debian:~/prog$ </span><span class="cmd">nano hello.c</span></div>
+<div class="line comment"># type your C code, Ctrl+O to save, Ctrl+X to exit</div>
+<div class="blank"></div>
+<div class="line"><span class="path">hunter@debian:~/prog$ </span><span class="cmd">cat hello.c</span></div>
+<div class="blank"></div>
+<div class="line comment"># compile for host (x86_64)</div>
+<div class="line"><span class="path">hunter@debian:~/prog$ </span><span class="cmd">gcc hello.c -o hello_x86-64</span></div>
+<div class="line"><span class="path">hunter@debian:~/prog$ </span><span class="cmd">./hello_x86-64</span></div>
+<div class="blank"></div>
+<div class="line comment"># cross-compile for RISC-V</div>
+<div class="line"><span class="path">hunter@debian:~/prog$ </span><span class="cmd">riscv64-linux-gnu-gcc hello.c -o hello_riscv64</span></div>
+<div class="line"><span class="path">hunter@debian:~/prog$ </span><span class="cmd">./hello_riscv64</span></div>
+<div class="line comment"># will fail here: Exec format error (expected — wrong CPU arch)</div>
+<div class="blank"></div>
+<div class="line comment"># inspect binaries</div>
+<div class="line"><span class="path">hunter@debian:~/prog$ </span><span class="cmd">file hello.c</span></div>
+<div class="line"><span class="path">hunter@debian:~/prog$ </span><span class="cmd">file hello_x86-64</span></div>
+<div class="line"><span class="path">hunter@debian:~/prog$ </span><span class="cmd">file hello_riscv64</span></div>
+</div>
+</section>
+
+<section>
+<div class="step-title"><span class="num">STEP 10</span>SET UP BRIDGE INTERFACE (br10)</div>
+<div class="block">
+<div class="line"><span class="path">root@debian:~# </span><span class="cmd">apt-get install bridge-utils uml-utilities</span></div>
+<div class="blank"></div>
+<div class="line"><span class="path">root@debian:~# </span><span class="cmd">cd /etc</span></div>
+<div class="line"><span class="path">root@debian:/etc# </span><span class="cmd">mkdir qemu</span></div>
+<div class="line"><span class="path">root@debian:/etc# </span><span class="cmd">cd qemu</span></div>
+<div class="line"><span class="path">root@debian:/etc/qemu# </span><span class="cmd">nano bridge.conf</span></div>
+<div class="line comment"># content:</div>
+<div class="line cmd">allow br10</div>
+<div class="blank"></div>
+<div class="line"><span class="path">root@debian:/etc/qemu# </span><span class="cmd">nano /etc/network/interfaces</span></div>
+<div class="line comment"># add:</div>
+<div class="line cmd">auto br10</div>
+<div class="line cmd">iface br10 inet static</div>
+<div class="line cmd">address 192.168.10.1</div>
+<div class="line cmd">netmask 255.255.255.0</div>
+<div class="line cmd">#gateway 10.0.2.15</div>
+<div class="line cmd">bridge_ports tap10</div>
+<div class="line cmd">bridge_fd 9</div>
+<div class="line cmd">bridge_hello 2</div>
+<div class="line cmd">bridge_maxage 12</div>
+<div class="line cmd">bridge_stp off</div>
+<div class="blank"></div>
+<div class="line comment"># comment out (or omit) the "gateway" line to avoid the</div>
+<div class="line comment"># duplicate default-route problem described in Step 10b.</div>
+<div class="blank"></div>
+<div class="line"><span class="path">root@debian:/etc/qemu# </span><span class="cmd">reboot</span></div>
+<div class="blank"></div>
+<div class="line comment"># verify after reboot</div>
+<div class="line"><span class="path">hunter@debian:~$ </span><span class="cmd">ip addr show</span></div>
+<div class="line"><span class="path">hunter@debian:~$ </span><span class="cmd">ping 192.168.10.1</span></div>
+<div class="line comment"># Ctrl+C to stop ping</div>
+</div>
+</section>
+
+<section>
+<div class="step-title"><span class="num">STEP 10b</span>FIX DUPLICATE DEFAULT ROUTE (if seen)</div>
+<div class="block">
+<div class="line"><span class="path">hunter@debian:~$ </span><span class="cmd">ip route</span></div>
+<div class="line comment"># if you see two "default via ..." lines (one via br10):</div>
+<div class="line"><span class="path">root@debian:~# </span><span class="cmd">ip route del default dev br10</span></div>
+<div class="line"><span class="path">root@debian:~# </span><span class="cmd">ip route</span></div>
+<div class="blank"></div>
+<div class="line comment"># permanent fix: edit /etc/network/interfaces and comment out the</div>
+<div class="line comment"># "gateway 10.0.2.15" line under br10, then:</div>
+<div class="line"><span class="path">root@debian:~# </span><span class="cmd">/etc/init.d/networking restart</span></div>
+<div class="line"><span class="path">root@debian:~# </span><span class="cmd">ip route</span></div>
+</div>
+</section>
+
+<section>
+<div class="step-title"><span class="num">STEP 11</span>INSTALL QEMU</div>
+<div class="block">
+<div class="line"><span class="path">root@debian:~# </span><span class="cmd">apt-get install qemu-user-static qemu-system-riscv64</span></div>
+<div class="line"><span class="path">root@debian:~# </span><span class="cmd">chmod u+s /usr/lib/qemu/qemu-bridge-helper</span></div>
+</div>
+</section>
+
+<section>
+<div class="step-title"><span class="num">STEP 12</span>DOWNLOAD CLASS BUILD SCRIPTS</div>
+<div class="block">
+<div class="line"><span class="path">hunter@debian:~$ </span><span class="cmd">wget http://10.0.1.147/virtualriscv.tar.xz</span></div>
+<div class="line"><span class="path">hunter@debian:~$ </span><span class="cmd">tar xfva virtualriscv.tar.xz</span></div>
+<div class="line"><span class="path">hunter@debian:~$ </span><span class="cmd">cd ~/virtualriscv</span></div>
+</div>
+</section>
+
+<section>
+<div class="step-title"><span class="num">STEP 13</span>CONFIGURE &amp; COMPILE LINUX KERNEL (6.1.177)</div>
+<div class="block">
+<div class="line"><span class="path">hunter@debian:~/virtualriscv$ </span><span class="cmd">bash build_kernel.sh</span></div>
+</div>
+</section>
+
+<section>
+<div class="step-title"><span class="num">STEP 14</span>CREATE ROOT FILESYSTEM (debootstrap)</div>
+<div class="block">
+<div class="line"><span class="path">root@debian:~# </span><span class="cmd">apt-get install debootstrap</span></div>
+<div class="blank"></div>
+<div class="line comment"># edit mirror IP in the script first if needed:</div>
+<div class="line"><span class="path">hunter@debian:~/virtualriscv$ </span><span class="cmd">nano debootstrap_rsicv.sh</span></div>
+<div class="line comment"># change: DEBIAN_MIRROR=http://&lt;old-ip&gt;//$DEBIAN_VERSION</div>
+<div class="line comment"># to:     DEBIAN_MIRROR=http://10.0.1.147//$DEBIAN_VERSION</div>
+<div class="line comment"># (or http://deb.debian.org//debian if off-campus)</div>
+<div class="blank"></div>
+<div class="line"><span class="path">root@debian:~# </span><span class="cmd">cd /home/hunter/virtualriscv</span></div>
+<div class="line"><span class="path">root@debian:/home/hunter/virtualriscv# </span><span class="cmd">bash debootstrap_rsicv.sh</span></div>
+<div class="blank"></div>
+<div class="line comment"># if download fails, re-fetch script and retry:</div>
+<div class="line"><span class="path">hunter@debian:~/virtualriscv$ </span><span class="cmd">rm -f debootstrap_rsicv.sh</span></div>
+<div class="line"><span class="path">hunter@debian:~/virtualriscv$ </span><span class="cmd">wget http://10.0.1.147/debootstrap_riscv.sh</span></div>
+<div class="line"><span class="path">root@debian:/home/hunter/virtualriscv# </span><span class="cmd">bash debootstrap_rsicv.sh</span></div>
+<div class="blank"></div>
+<div class="line comment"># rootfs defaults created by the script:</div>
+<div class="line comment">#   web page: /var/www/html/index.html -> "Welcome to RISC-V LeeNIX!!"</div>
+<div class="line comment">#     view at http://192.168.10.100:8000</div>
+<div class="line comment">#   default account created inside rootfs: leenix / leenix</div>
+<div class="line comment">#     (root password inside rootfs set to: leenix)</div>
+</div>
+</section>
+
+<section>
+<div class="step-title"><span class="num">STEP 15</span>COMPILE OPENSBI</div>
+<div class="block">
+<div class="line"><span class="path">hunter@debian:~/virtualriscv$ </span><span class="cmd">bash build_opensbi.sh</span></div>
+</div>
+</section>
+
+<section>
+<div class="step-title"><span class="num">STEP 16</span>COMPILE U-BOOT (2024.10)</div>
+<div class="block">
+<div class="line"><span class="path">hunter@debian:~/virtualriscv$ </span><span class="cmd">bash build_uboot.sh</span></div>
+</div>
+</section>
+
+<section>
+<div class="step-title"><span class="num">STEP 17</span>(OPTIONAL) FIX/UPDATE APT MIRROR ON THE HOST VM</div>
+<div class="block">
+<div class="line"><span class="path">root@debian:~# </span><span class="cmd">cd /etc/apt</span></div>
+<div class="line"><span class="path">root@debian:/etc/apt# </span><span class="cmd">nano sources.list</span></div>
+<div class="line comment"># On campus, lines should point to:</div>
+<div class="line comment">#   deb http://10.0.1.147/debian/ trixie main contrib non-free non-free-firmware</div>
+<div class="line comment">#   deb http://security.debian.org/debian-security trixie-security main non-free-firmware</div>
+<div class="line comment">#   deb http://10.0.1.147/debian/ trixie-updates main contrib non-free non-free-firmware</div>
+<div class="line comment">#</div>
+<div class="line comment"># Off campus, replace 10.0.1.147 with deb.debian.org, e.g.:</div>
+<div class="line comment">#   deb http://deb.debian.org/debian trixie main contrib non-free non-free-firmware</div>
+<div class="blank"></div>
+<div class="line"><span class="path">root@debian:/etc/apt# </span><span class="cmd">apt-get update</span></div>
+<div class="line"><span class="path">root@debian:/etc/apt# </span><span class="cmd">apt-get upgrade</span></div>
+<div class="blank"></div>
+<div class="line comment"># alternative: fetch a ready-made sources.list from the class server</div>
+<div class="line"><span class="path">root@debian:/etc/apt# </span><span class="cmd">rm -f sources.list</span></div>
+<div class="line"><span class="path">root@debian:/etc/apt# </span><span class="cmd">wget http://10.0.1.147/sources.list</span></div>
+<div class="line"><span class="path">root@debian:/etc/apt# </span><span class="cmd">apt-get update</span></div>
+</div>
+</section>
+
+<section>
+<div class="step-title"><span class="num">STEP 18</span>CREATE THE VIRTUAL SD CARD IMAGE</div>
+<div class="block">
+<div class="line"><span class="path">hunter@debian:~/virtualriscv$ </span><span class="cmd">cd ~/virtualriscv</span></div>
+<div class="line"><span class="path">root@debian:/home/hunter/virtualriscv# </span><span class="cmd">bash createsdimg.sh</span></div>
+<div class="blank"></div>
+<div class="line comment"># inspect the resulting image</div>
+<div class="line"><span class="path">root@debian:/home/hunter/virtualriscv# </span><span class="cmd">ls -l sd_1G.img</span></div>
+<div class="line"><span class="path">root@debian:/home/hunter/virtualriscv# </span><span class="cmd">file sd_1G.img</span></div>
+<div class="line"><span class="path">root@debian:/home/hunter/virtualriscv# </span><span class="cmd">fdisk -lu sd_1G.img</span></div>
+<div class="blank"></div>
+<div class="line comment"># if a revised script is needed:</div>
+<div class="line"><span class="path">root@debian:/home/hunter/virtualriscv# </span><span class="cmd">rm createsdimg.sh</span></div>
+<div class="line"><span class="path">root@debian:/home/hunter/virtualriscv# </span><span class="cmd">wget http://10.0.1.147/createsdimg.sh</span></div>
+</div>
+</section>
+
+<section>
+<div class="step-title"><span class="num">STEP 19</span>COPY KERNEL + ROOTFS + U-BOOT ONTO THE SD IMAGE</div>
+<div class="block">
+<div class="line"><span class="path">root@debian:/home/hunter/virtualriscv# </span><span class="cmd">df -h</span></div>
+<div class="line comment"># check space before copying</div>
+<div class="blank"></div>
+<div class="line"><span class="path">root@debian:/home/hunter/virtualriscv# </span><span class="cmd">bash cprootfs.sh</span></div>
+<div class="line comment"># copy rootfs onto sd image</div>
+<div class="line"><span class="path">root@debian:/home/hunter/virtualriscv# </span><span class="cmd">df -h</span></div>
+<div class="blank"></div>
+<div class="line"><span class="path">root@debian:/home/hunter/virtualriscv# </span><span class="cmd">bash cpsdcard.sh</span></div>
+<div class="line comment"># copy kernel/u-boot onto sd image</div>
+<div class="line"><span class="path">root@debian:/home/hunter/virtualriscv# </span><span class="cmd">df -h</span></div>
+<div class="blank"></div>
+<div class="line"><span class="path">root@debian:/home/hunter/virtualriscv# </span><span class="cmd">bash unsetsdcard.sh</span></div>
+<div class="line comment"># unmount sd image / clear loop device</div>
+<div class="line"><span class="path">root@debian:/home/hunter/virtualriscv# </span><span class="cmd">df -h</span></div>
+<div class="blank"></div>
+<div class="line comment"># fix ownership (script runs as root, so the image ends up root:root)</div>
+<div class="line"><span class="path">root@debian:/home/hunter/virtualriscv# </span><span class="cmd">ls -l sd_1G.img</span></div>
+<div class="line"><span class="path">root@debian:/home/hunter/virtualriscv# </span><span class="cmd">chown hunter:hunter sd_1G.img</span></div>
+<div class="line"><span class="path">root@debian:/home/hunter/virtualriscv# </span><span class="cmd">ls -l sd_1G.img</span></div>
+</div>
+</section>
+
+<section>
+<div class="step-title"><span class="num">STEP 20</span>BOOT THE RISC-V SYSTEM IN QEMU</div>
+<div class="block">
+<div class="line"><span class="path">hunter@debian:~/virtualriscv$ </span><span class="cmd">bash runsd.sh</span></div>
+<div class="blank"></div>
+<div class="line comment"># login once it boots to the prompt (riscvleenix login:)</div>
+<div class="line cmd">riscvleenix login: root</div>
+<div class="line cmd">Password: leenix</div>
+<div class="line comment"># (rootfs also has a "leenix" user with the same password: leenix)</div>
+</div>
+</section>
+
+<section>
+<div class="step-title"><span class="num">STEP 21</span>VERIFY THE RUNNING RISC-V SYSTEM</div>
+<div class="block">
+<div class="line"><span class="path">root@riscvleenix:~# </span><span class="cmd">cat /proc/cpuinfo</span></div>
+<div class="line comment"># confirm rv64 architecture</div>
+<div class="line"><span class="path">root@riscvleenix:~# </span><span class="cmd">uname -a</span></div>
+<div class="line comment"># confirm kernel 6.1.177 riscv64</div>
+<div class="line"><span class="path">root@riscvleenix:~# </span><span class="cmd">df -h</span></div>
+<div class="line comment"># confirm /dev/root usage &lt; 256 MB</div>
+<div class="line"><span class="path">root@riscvleenix:~# </span><span class="cmd">free -h</span></div>
+<div class="line comment"># confirm ~1.8-2 GB memory available</div>
+</div>
+</section>
+
+</main>
+</div>
+<button class="back-top" id="backTop" title="Back to top" aria-label="Back to top">↑</button>
+
+<script>
+(function(){
+  var sections = Array.prototype.slice.call(document.querySelectorAll('.wrap > section'));
+  var STORAGE_KEY = 'riscv-guide-progress-v1';
+  var progress = {};
+  try{ progress = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); }catch(e){ progress = {}; }
+  if(!progress || typeof progress !== 'object'){ progress = {}; }
+
+  var tocList = document.getElementById('tocList');
+  var stepMeta = [];
+
+  // ---- functions declared up front (never inside a try block — keeps
+  // hoisting behavior identical across browsers instead of relying on
+  // legacy Annex-B block-scoped-function quirks) ----
+
+  function updateProgress(){
+    var total = sections.length;
+    var done = Object.keys(progress).filter(function(k){ return progress[k]; }).length;
+    var countEl = document.getElementById('progressCount');
+    var fillEl = document.getElementById('progressFill');
+    if(countEl) countEl.textContent = done + '/' + total;
+    if(fillEl) fillEl.style.width = (total ? (done/total*100) : 0) + '%';
+  }
+
+  var sidebar = document.getElementById('sidebar');
+  var overlay = document.getElementById('sidebarOverlay');
+  function openSidebarMobile(){ if(sidebar) sidebar.classList.add('open'); if(overlay) overlay.classList.add('show'); }
+  function closeSidebarMobile(){ if(sidebar) sidebar.classList.remove('open'); if(overlay) overlay.classList.remove('show'); }
+
+  var copyIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
+  var checkIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+
+  function fallbackCopy(text){
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.top = '-1000px';
+    ta.style.left = '-1000px';
+    document.body.appendChild(ta);
+    var prevFocus = document.activeElement;
+    ta.focus();
+    ta.select();
+    try{ ta.setSelectionRange(0, text.length); }catch(e){} // iOS Safari needs an explicit range
+    try{ document.execCommand('copy'); }catch(e){}
+    document.body.removeChild(ta);
+    if(prevFocus && prevFocus.focus) { try{ prevFocus.focus(); }catch(e){} }
+  }
+
+  function doCopy(btn, text){
+    function ok(){
+      btn.classList.add('copied');
+      btn.innerHTML = checkIcon;
+      setTimeout(function(){ btn.classList.remove('copied'); btn.innerHTML = copyIcon; }, 1200);
+    }
+    try{
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(text).then(ok).catch(function(){ fallbackCopy(text); ok(); });
+      } else {
+        fallbackCopy(text); ok();
+      }
+    }catch(e){
+      fallbackCopy(text); ok();
+    }
+  }
+
+  // returns the runnable command text for a single .line, or null if it isn't one
+  function lineCommandText(line){
+    if(line.classList.contains('comment')) return null;
+    var cmdSpan = line.querySelector('.cmd');
+    var pathSpan = line.querySelector('.path');
+    if(cmdSpan) return cmdSpan.textContent;
+    if(!pathSpan) return line.textContent;
+    return null;
+  }
+
+  // ---------- assign ids + build TOC ----------
+  try{
+    sections.forEach(function(section, i){
+      var titleEl = section.querySelector('.step-title');
+      if(!titleEl) return;
+      var numEl = titleEl.querySelector('.num');
+      var numText = numEl ? numEl.textContent.trim() : ('STEP ' + i);
+      var labelText = titleEl.textContent.replace(numText, '').trim();
+      var id = numText.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'') || ('step-' + i);
+      // guard against accidental duplicate ids (e.g. if a step title is edited later)
+      var uniqueId = id, suffix = 2;
+      while(document.getElementById(uniqueId)){ uniqueId = id + '-' + suffix; suffix++; }
+      id = uniqueId;
+      section.id = id;
+
+      // wrap existing title content, add checkbox + anchor link
+      var left = document.createElement('span');
+      left.className = 'step-title-left';
+      while(titleEl.firstChild){ left.appendChild(titleEl.firstChild); }
+
+      var textSpan = document.createElement('span');
+      textSpan.className = 'step-title-text';
+      var numSpan = left.querySelector('.num');
+      var rest = document.createDocumentFragment();
+      Array.prototype.slice.call(left.childNodes).forEach(function(node){
+        if(node !== numSpan) rest.appendChild(node);
+      });
+      textSpan.appendChild(rest);
+
+      var checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'step-check';
+      checkbox.checked = !!progress[id];
+      checkbox.setAttribute('aria-label', 'Mark ' + numText + ' complete');
+
+      left.innerHTML = '';
+      if(numSpan) left.appendChild(numSpan);
+      left.appendChild(checkbox);
+      left.appendChild(textSpan);
+
+      var anchor = document.createElement('a');
+      anchor.className = 'step-anchor';
+      anchor.href = '#' + id;
+      anchor.textContent = '#';
+      anchor.title = 'Link to this step';
+
+      titleEl.appendChild(left);
+      titleEl.appendChild(anchor);
+
+      if(checkbox.checked) titleEl.classList.add('done');
+
+      // TOC entry
+      var li = document.createElement('li');
+      var tocLink = document.createElement('a');
+      tocLink.href = '#' + id;
+      tocLink.innerHTML = '<span class="toc-num">' + numText.replace(/^STEP\s*/i,'') + '</span><span class="toc-label"></span>';
+      tocLink.querySelector('.toc-label').textContent = labelText;
+      if(checkbox.checked) tocLink.classList.add('done');
+      li.appendChild(tocLink);
+      tocList.appendChild(li);
+
+      checkbox.addEventListener('change', function(){
+        progress[id] = checkbox.checked;
+        try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(progress)); }catch(e){}
+        titleEl.classList.toggle('done', checkbox.checked);
+        tocLink.classList.toggle('done', checkbox.checked);
+        updateProgress();
+      });
+
+      stepMeta.push({section: section, li: li, tocLink: tocLink, id: id, searchText: (numText + ' ' + labelText + ' ' + section.textContent).toLowerCase()});
+
+      tocLink.addEventListener('click', function(){ closeSidebarMobile(); });
+    });
+
+    updateProgress();
+
+    var resetBtn = document.getElementById('resetProgress');
+    if(resetBtn){
+      resetBtn.addEventListener('click', function(){
+        var ok = true;
+        try{ ok = confirm('Clear all checked-off progress?'); }catch(e){ ok = true; }
+        if(!ok) return;
+        progress = {};
+        try{ localStorage.setItem(STORAGE_KEY, '{}'); }catch(e){}
+        document.querySelectorAll('.step-check').forEach(function(cb){ cb.checked = false; });
+        document.querySelectorAll('.step-title').forEach(function(t){ t.classList.remove('done'); });
+        document.querySelectorAll('.toc-list a').forEach(function(a){ a.classList.remove('done'); });
+        updateProgress();
+      });
+    }
+  }catch(e){ /* TOC/progress setup failed — everything below still runs independently */ }
+
+  // ---------- active-section highlight on scroll ----------
+  // Guarded: an unsupported/missing IntersectionObserver must not stop every
+  // feature declared after it (copy buttons, search, mobile nav, back-to-top).
+  if(window.IntersectionObserver && tocList){
+    try{
+      var observer = new IntersectionObserver(function(entries){
+        entries.forEach(function(entry){
+          var link = tocList.querySelector('a[href="#' + entry.target.id + '"]');
+          if(!link) return;
+          if(entry.isIntersecting) link.classList.add('active');
+          else link.classList.remove('active');
+        });
+      }, {rootMargin: '-15% 0px -75% 0px'});
+      sections.forEach(function(s){ observer.observe(s); });
+    }catch(e){ /* active-section highlighting is a nicety, not essential */ }
+  }
+
+  // ---------- copy buttons (per-line, plus a small copy-all in the corner) ----------
+  try{
+    // hint on prompts so it's obvious a manual drag-select across lines
+    // will skip them — only the commands themselves get selected/copied
+    document.querySelectorAll('.path').forEach(function(p){
+      p.title = 'prompt — not selectable, skipped when you copy';
+    });
+    document.querySelectorAll('.line.comment, .comment').forEach(function(c){
+      c.title = c.title || 'comment — not selectable, skipped when you copy';
+    });
+
+    document.querySelectorAll('.block').forEach(function(block){
+      var lines = Array.prototype.slice.call(block.querySelectorAll(':scope > .line'));
+
+      // group backslash-continued multi-line commands so they copy as one unit
+      var i = 0;
+      var groups = [];
+      while(i < lines.length){
+        var line = lines[i];
+        var text = lineCommandText(line);
+        if(text === null){ i++; continue; }
+        var groupLines = [line];
+        var groupText = [text];
+        while(/\\\s*$/.test(text) && i + 1 < lines.length){
+          i++;
+          line = lines[i];
+          text = lineCommandText(line);
+          if(text === null) break;
+          groupLines.push(line);
+          groupText.push(text);
+        }
+        groups.push({lines: groupLines, text: groupText.join('\n')});
+        i++;
+      }
+
+      var allText = groups.map(function(g){ return g.text; }).join('\n').trim();
+
+      groups.forEach(function(g){
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'line-copy';
+        btn.innerHTML = copyIcon;
+        btn.title = g.lines.length > 1 ? 'Copy this multi-line command' : 'Copy this command';
+        btn.addEventListener('mousedown', function(e){ e.preventDefault(); }); // don't disturb an in-progress text selection
+        btn.addEventListener('click', function(e){
+          e.stopPropagation();
+          doCopy(btn, g.text);
+        });
+        g.lines[0].appendChild(btn);
+        for(var k = 1; k < g.lines.length; k++){ g.lines[k].classList.add('group-continuation'); }
+      });
+
+      if(groups.length > 1 && allText){
+        var allBtn = document.createElement('button');
+        allBtn.type = 'button';
+        allBtn.className = 'copy-all-btn';
+        allBtn.innerHTML = copyIcon;
+        allBtn.title = 'Copy all commands in this block';
+        allBtn.addEventListener('mousedown', function(e){ e.preventDefault(); });
+        allBtn.addEventListener('click', function(){ doCopy(allBtn, allText); });
+        block.insertBefore(allBtn, block.firstChild);
+      }
+    });
+  }catch(e){ /* copy buttons failing to attach shouldn't block search/nav below */ }
+
+  // ---------- search / filter ----------
+  try{
+    var searchBox = document.getElementById('searchBox');
+    var searchCount = document.getElementById('searchCount');
+    if(searchBox){
+      searchBox.addEventListener('input', function(){
+        var q = searchBox.value.trim().toLowerCase();
+        var matches = 0;
+        stepMeta.forEach(function(meta){
+          var hit = !q || meta.searchText.indexOf(q) !== -1;
+          meta.section.classList.toggle('filtered-out', !hit);
+          meta.li.classList.toggle('hidden', !hit);
+          if(hit) matches++;
+        });
+        if(searchCount) searchCount.textContent = q ? (matches + ' / ' + stepMeta.length + ' steps') : '';
+      });
+    }
+  }catch(e){}
+
+  // ---------- mobile sidebar toggle ----------
+  try{
+    var toggleBtn = document.getElementById('tocToggle');
+    if(toggleBtn) toggleBtn.addEventListener('click', openSidebarMobile);
+    if(overlay) overlay.addEventListener('click', closeSidebarMobile);
+  }catch(e){}
+
+  // ---------- back to top ----------
+  try{
+    var backTop = document.getElementById('backTop');
+    if(backTop){
+      window.addEventListener('scroll', function(){
+        backTop.classList.toggle('show', window.scrollY > 500);
+      });
+      backTop.addEventListener('click', function(){
+        window.scrollTo({top:0, behavior:'smooth'});
+      });
+    }
+  }catch(e){}
+})();
+</script>
+</body>
+</html>
