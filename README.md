@@ -156,6 +156,8 @@ open index.html   # or: python3 -m http.server, then visit localhost:8000
 
 ## Notes
 
+- Default credentials throughout: user `hunter`, password `abc123` (root password
+  is also `abc123`).
 - Commands reference a local class network (`10.0.1.147`) and shared class build
   scripts — swap those endpoints if following this outside that environment.
 - Tested for kernel `6.1.177`, U-Boot `2024.10`.

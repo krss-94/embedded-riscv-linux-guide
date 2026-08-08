@@ -453,6 +453,11 @@ Off-campus, swap that IP for <b>deb.debian.org</b> wherever it appears.
 <div class="line comment"># type your C code, Ctrl+O to save, Ctrl+X to exit</div>
 <div class="blank"></div>
 <div class="line"><span class="path">hunter@debian:~/prog$ </span><span class="cmd">cat hello.c</span></div>
+<div class="line cmd">#include &lt;stdio.h&gt;</div>
+<div class="line cmd">int main() {</div>
+<div class="line cmd">    printf("Hello, World!\n");</div>
+<div class="line cmd">    return 0;</div>
+<div class="line cmd">}</div>
 <div class="blank"></div>
 <div class="line comment"># compile for host (x86_64)</div>
 <div class="line"><span class="path">hunter@debian:~/prog$ </span><span class="cmd">gcc hello.c -o hello_x86-64</span></div>
